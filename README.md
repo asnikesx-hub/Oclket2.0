@@ -1,4 +1,4 @@
-# Oclket cluster
+# Oclket: Distributed In-Memory Key-Value Store (Go)
 
 Each process stores a local replica, accepts authenticated peer connections, and broadcasts local writes to its connected peers. Configure a connected peer graph; peers exchange snapshots on connection and reconnect automatically.
 
