@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"sync"
 
@@ -47,6 +48,9 @@ func compressValue(value []byte) ([]byte, error) {
 
 	out := bytes.NewBuffer(buf)
 	writer.Reset(out)
+	if err := writer.Apply(lz4.SizeOption(uint64(len(value)))); err != nil {
+		return nil, err
+	}
 
 	if _, err := writer.Write(value); err != nil {
 		return nil, err
@@ -79,19 +83,47 @@ func decompressValue(value []byte) ([]byte, error) {
 	in := bytes.NewReader(value)
 	reader.Reset(in)
 
+	var firstByte [1]byte
+	n, err := reader.Read(firstByte[:])
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+
+	if size := reader.Size(); size > 0 {
+		if size < n {
+			return nil, fmt.Errorf("invalid LZ4 content size: got %d bytes, expected %d", n, size)
+		}
+		buf := make([]byte, size)
+		copy(buf, firstByte[:n])
+		if n < size {
+			if _, err := io.ReadFull(reader, buf[n:]); err != nil {
+				return nil, err
+			}
+		}
+
+		var extra [1]byte
+		if n, err := reader.Read(extra[:]); n != 0 {
+			return nil, fmt.Errorf("invalid LZ4 content size: frame exceeds %d bytes", size)
+		} else if err != io.EOF {
+			if err != nil {
+				return nil, err
+			}
+			return nil, fmt.Errorf("invalid LZ4 frame termination")
+		}
+		return buf, nil
+	}
+
 	estimated := len(value) * 4
 	if estimated < 4096 {
 		estimated = 4096
 	}
 
-	buf := make([]byte, 0, estimated)
+	buf := make([]byte, n, estimated)
+	copy(buf, firstByte[:n])
 
 	for {
 		if len(buf) == cap(buf) {
 			newCap := cap(buf) * 2
-			if newCap == 0 {
-				newCap = 4096
-			}
 			newBuf := make([]byte, len(buf), newCap)
 			copy(newBuf, buf)
 			buf = newBuf

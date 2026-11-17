@@ -13,7 +13,7 @@ type wireOperation struct {
 	Timestamp int64
 }
 
-// localSetRequest — локальный SET от PHP. Ключ — строка.
+// localSetRequest — локальный SET от PHP. Ключ и значение — байтовые последовательности.
 // Хэширование в uint64 происходит в Master.handleLocal.
 type localSetRequest struct {
 	Key   []byte

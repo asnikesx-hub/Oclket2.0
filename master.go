@@ -400,7 +400,7 @@ func (m *Master) handleLocal(client *Client) {
 			}
 
 		case L_DEL:
-			key := fnv1a64(string(payload))
+			key := fnv1a64Bytes(payload)
 			err = m.Delete(key)
 			if err == nil {
 				err = client.Send(A_OK, nil)

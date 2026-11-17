@@ -7,16 +7,31 @@ it does not expose peer, authentication, or replication commands.
 ## PHP API
 
 ```php
-oclket_set(string $key, string $value, int $ttl = 0): bool
-oclket_get(string $key): string|false
+oclket_set(string $key, mixed $value, int $ttl = 0): bool
+oclket_get(string $key): mixed
 oclket_del(string $key): bool
 ```
 
-Keys and values are binary-safe PHP strings. `ttl` is in seconds; `0` means no
-expiration. `oclket_get()` returns `false` for a missing key and a string for a
-found key, including an empty string. SET and DEL return `true` after the
-service confirms the operation. Invalid arguments and socket/service errors
-throw `Exception`.
+Keys are binary-safe PHP strings. Values are encoded by the extension's
+dependency-free binary codec and sent to Oclket as bytes. The codec supports
+strings, integers, floats, booleans, `null`, arrays, and ordinary user-defined
+objects with public properties. Object classes must already be loaded when
+reading. Cyclic values, resources, special/internal objects, and objects with
+private or protected properties or custom serialization methods are rejected.
+Object identity and PHP references are not preserved. Values written by older
+extension versions or clients without the binary marker keep the previous
+string behavior; values written by the previous PHP-serialization version are
+still decoded for compatibility.
+
+`oclket_get()` returns `false` for a missing key, which is indistinguishable
+from a stored `false`. `ttl` is in seconds; `0` means no expiration. SET and
+DEL return `true` after the service confirms the operation. Invalid arguments
+and socket/service errors throw `Exception`.
+
+Only use object values from trusted clients: restoring user-defined objects may
+run their magic property handlers or destructors. Legacy PHP-serialized values
+may also invoke `__wakeup()` or `__unserialize()`. Restrict Unix socket
+permissions to trusted local users.
 
 The extension uses one persistent connection per PHP process and reconnects
 on the next call after a transport failure. It does not retry an operation
@@ -48,19 +63,17 @@ service. The path can also be changed at runtime with `ini_set()`.
 ## Example
 
 ```php
-oclket_set("greeting", "hello", 60);
+oclket_set("greeting", ["message" => "hello", "count" => 3], 60);
 $value = oclket_get("greeting");
 oclket_del("greeting");
 ```
 
 With the extension enabled and the Oclket service running, run
-`php smoke.php` to check missing keys, binary values, empty values, and deletes.
+`php smoke.php` to check scalar, array, object, binary, and null values, plus
+missing keys and deletes.
 
 ## Allocation behavior
 
-The extension does not build temporary request payloads: it sends PHP string
-data directly with vectored socket I/O and keeps its socket buffers on the
-stack. GET reads the result directly into the PHP return string, avoiding an
-additional intermediate copy. PHP must still allocate the returned string;
-exceptions also allocate when reporting errors, so a literal zero-allocation
-GET/SET API is not possible with ordinary PHP strings.
+The extension sends the encoded byte buffer with vectored socket I/O and keeps
+its socket buffers on the stack. The codec uses `smart_str` growth for SET and
+decodes GET values from the received payload buffer.

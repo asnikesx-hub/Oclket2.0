@@ -1,21 +1,38 @@
 <?php
 
 $key = 'oclket-php-smoke-' . bin2hex(random_bytes(12));
-$value = "\0binary\0value\xff";
 
 try {
     if (oclket_get($key) !== false) {
         throw new RuntimeException('Expected an initially missing key');
     }
-    if (oclket_set($key, $value) !== true) {
-        throw new RuntimeException('SET did not return true');
+
+    $values = [
+        "binary" => "\0binary\0value\xff",
+        "empty string" => "",
+        "integer" => 42,
+        "float" => 3.125,
+        "true" => true,
+        "false" => false,
+        "null" => null,
+        "array" => ["nested" => [1, "two", false]],
+        "repeated keys" => array_fill(0, 500, ["id" => 1, "name" => "test", "ok" => true]),
+    ];
+    foreach ($values as $label => $expected) {
+        if (oclket_set($key, $expected) !== true || oclket_get($key) !== $expected) {
+            throw new RuntimeException("GET did not preserve the $label value");
+        }
     }
-    if (oclket_get($key) !== $value) {
-        throw new RuntimeException('GET did not preserve the binary value');
+
+    $object = (object) ["answer" => 42];
+    if (oclket_set($key, $object) !== true) {
+        throw new RuntimeException('SET did not accept an object');
     }
-    if (oclket_set($key, '') !== true || oclket_get($key) !== '') {
-        throw new RuntimeException('Empty values were not preserved');
+    $actual = oclket_get($key);
+    if (!($actual instanceof stdClass) || $actual->answer !== $object->answer) {
+        throw new RuntimeException('GET did not preserve the object value');
     }
+
     if (oclket_del($key) !== true || oclket_get($key) !== false) {
         throw new RuntimeException('DEL did not remove the key');
     }
